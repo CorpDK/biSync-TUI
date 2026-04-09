@@ -1,0 +1,26 @@
+# Binary (root-level only, not cmd/syncctl/)
+/syncctl
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.log
