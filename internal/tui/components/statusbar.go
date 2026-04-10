@@ -25,6 +25,11 @@ func (m *StatusBarModel) SetWidth(w int) {
 	m.width = w
 }
 
+// SetBindings replaces the displayed keybinding hints.
+func (m *StatusBarModel) SetBindings(bindings []key.Binding) {
+	m.bindings = bindings
+}
+
 // View renders the status bar.
 func (m StatusBarModel) View() string {
 	var parts []string

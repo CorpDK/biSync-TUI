@@ -61,7 +61,6 @@ func NewPool(maxWorkers int, engine *Engine, lockMgr *LockManager, stateStore *s
 	}
 }
 
-// Start launches the worker goroutines. Call Shutdown to stop.
 func (p *Pool) Start(ctx context.Context) {
 	for i := 0; i < p.maxWorkers; i++ {
 		p.wg.Add(1)
@@ -69,22 +68,10 @@ func (p *Pool) Start(ctx context.Context) {
 	}
 }
 
-// Submit adds a job to the queue.
-func (p *Pool) Submit(job Job) {
-	p.jobs <- job
-}
+func (p *Pool) Submit(job Job)              { p.jobs <- job }
+func (p *Pool) Results() <-chan JobResult    { return p.results }
+func (p *Pool) Output() <-chan OutputLine    { return p.output }
 
-// Results returns the channel for completed job results.
-func (p *Pool) Results() <-chan JobResult {
-	return p.results
-}
-
-// Output returns the channel for real-time output lines.
-func (p *Pool) Output() <-chan OutputLine {
-	return p.output
-}
-
-// Shutdown closes the job queue and waits for workers to finish.
 func (p *Pool) Shutdown() {
 	close(p.jobs)
 	p.wg.Wait()
@@ -94,7 +81,6 @@ func (p *Pool) Shutdown() {
 
 func (p *Pool) worker(ctx context.Context) {
 	defer p.wg.Done()
-
 	for job := range p.jobs {
 		if ctx.Err() != nil {
 			return
@@ -106,20 +92,34 @@ func (p *Pool) worker(ctx context.Context) {
 func (p *Pool) executeJob(ctx context.Context, job Job) {
 	name := job.Mapping.Name
 
-	// Acquire lock
 	lock, err := p.lockMgr.Acquire(name)
 	if err != nil {
-		p.results <- JobResult{
-			MappingName: name,
-			Result: SyncResult{
-				ErrorMsg: err.Error(),
-			},
-		}
+		p.results <- JobResult{MappingName: name, Result: SyncResult{ErrorMsg: err.Error()}}
 		return
 	}
 	defer p.lockMgr.Release(lock)
 
-	// Merge per-mapping config into sync options
+	opts := p.mergeOptions(job)
+	p.markSyncing(name)
+	outputCh := p.startOutputForwarder(name)
+
+	if job.Mapping.BackupEnabled {
+		bm := NewBackupManager(p.engine)
+		opts.ExtraFlags = append(opts.ExtraFlags, bm.BuildBackupFlags(job.Mapping)...)
+	}
+
+	result := p.engine.RunSync(ctx, job.Mapping, opts, outputCh)
+	close(outputCh)
+
+	p.cleanupBackups(ctx, job.Mapping, result.Success)
+	p.updateState(name, result)
+	p.recordHistory(name, result)
+	p.sendNotification(name, result)
+
+	p.results <- JobResult{MappingName: name, Result: result}
+}
+
+func (p *Pool) mergeOptions(job Job) SyncOptions {
 	opts := job.Options
 	if opts.FiltersFile == "" {
 		opts.FiltersFile = job.Mapping.FiltersFile
@@ -131,13 +131,16 @@ func (p *Pool) executeJob(ctx context.Context, job Job) {
 		opts.ConflictResolve = job.Mapping.ConflictResolve
 	}
 	opts.ExtraFlags = append(opts.ExtraFlags, job.Mapping.ExtraFlags...)
+	return opts
+}
 
-	// Update state to syncing
+func (p *Pool) markSyncing(name string) {
 	ms, _ := p.stateStore.Load(name)
 	ms.LastStatus = state.StatusSyncing
 	p.stateStore.Save(name, ms)
+}
 
-	// Create output channel for this job
+func (p *Pool) startOutputForwarder(name string) chan string {
 	outputCh := make(chan string, 128)
 	go func() {
 		for line := range outputCh {
@@ -147,29 +150,22 @@ func (p *Pool) executeJob(ctx context.Context, job Job) {
 			}
 		}
 	}()
+	return outputCh
+}
 
-	// Add backup flags if enabled
-	if job.Mapping.BackupEnabled {
+func (p *Pool) cleanupBackups(ctx context.Context, mapping config.Mapping, success bool) {
+	if success && mapping.BackupEnabled {
 		bm := NewBackupManager(p.engine)
-		opts.ExtraFlags = append(opts.ExtraFlags, bm.BuildBackupFlags(job.Mapping)...)
+		go bm.CleanupOldBackups(ctx, mapping)
 	}
+}
 
-	// Execute sync
-	result := p.engine.RunSync(ctx, job.Mapping, opts, outputCh)
-	close(outputCh)
-
-	// Cleanup old backups after successful sync
-	if result.Success && job.Mapping.BackupEnabled {
-		bm := NewBackupManager(p.engine)
-		go bm.CleanupOldBackups(ctx, job.Mapping)
-	}
-
-	// Update state
+func (p *Pool) updateState(name string, result SyncResult) {
+	ms, _ := p.stateStore.Load(name)
 	now := time.Now()
 	ms.LastSync = &now
 	ms.LastDuration = result.Duration.Truncate(time.Second).String()
 	ms.SyncCount++
-
 	if result.Success {
 		ms.LastStatus = state.StatusIdle
 		ms.LastError = ""
@@ -178,33 +174,29 @@ func (p *Pool) executeJob(ctx context.Context, job Job) {
 		ms.LastError = result.ErrorMsg
 	}
 	p.stateStore.Save(name, ms)
+}
 
-	// Record sync history
-	if p.historyStore != nil {
-		status := "success"
-		errMsg := ""
-		if !result.Success {
-			status = "error"
-			errMsg = result.ErrorMsg
-		}
-		files, bytes := ParseTransferSummary(result.Output)
-		p.historyStore.Append(name, state.HistoryRecord{
-			Timestamp:        now,
-			Duration:         result.Duration,
-			Status:           status,
-			FilesTransferred: files,
-			BytesTransferred: bytes,
-			Error:            errMsg,
-		})
+func (p *Pool) recordHistory(name string, result SyncResult) {
+	if p.historyStore == nil {
+		return
 	}
+	status, errMsg := "success", ""
+	if !result.Success {
+		status, errMsg = "error", result.ErrorMsg
+	}
+	files, bytes := ParseTransferSummary(result.Output)
+	p.historyStore.Append(name, state.HistoryRecord{
+		Timestamp:        time.Now(),
+		Duration:         result.Duration,
+		Status:           status,
+		FilesTransferred: files,
+		BytesTransferred: bytes,
+		Error:            errMsg,
+	})
+}
 
-	// Desktop notification
+func (p *Pool) sendNotification(name string, result SyncResult) {
 	if p.notifier != nil {
 		p.notifier.NotifySyncResult(name, result.Success, result.Duration, result.ErrorMsg)
-	}
-
-	p.results <- JobResult{
-		MappingName: name,
-		Result:      result,
 	}
 }

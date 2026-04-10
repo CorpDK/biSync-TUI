@@ -92,9 +92,30 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-// ShortHelp returns a minimal set of keybindings for the status bar.
-func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Sync, k.SyncAll, k.DryRun, k.Diff, k.NewMapping, k.Remotes, k.Help, k.Quit}
+// MappingsHelp returns keybindings for the Mappings view status bar.
+func (k KeyMap) MappingsHelp() []key.Binding {
+	return []key.Binding{k.Sync, k.SyncAll, k.DryRun, k.Diff, k.NewMapping, k.Help, k.Quit}
+}
+
+// RemotesHelp returns keybindings for the Remotes view status bar.
+func RemotesHelp() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "create")),
+		key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "delete")),
+		key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "test connection")),
+		key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+	}
+}
+
+// DashboardHelp returns keybindings for the Dashboard view status bar.
+func DashboardHelp() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "mappings")),
+		key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "remotes")),
+		key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+	}
 }
 
 // FullHelp returns the complete keybinding set.

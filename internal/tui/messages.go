@@ -92,13 +92,13 @@ type RemoteDeletedMsg struct {
 	Err  error
 }
 
-// RemoteCreatedMsg signals that a remote was created.
-type RemoteCreatedMsg struct {
-	Err error
-}
-
 // RemoteTestMsg carries the result of a remote connectivity test.
 type RemoteTestMsg struct {
 	Name string
 	Err  error
+}
+
+// RcloneConfigDoneMsg signals that the interactive rclone config process exited.
+type RcloneConfigDoneMsg struct {
+	Err error
 }

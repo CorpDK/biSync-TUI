@@ -207,54 +207,6 @@ func NewEncryptionForm(mappingName string, remotes []string) (*huh.Form, []strin
 	return form, keys
 }
 
-// NewRemoteForm builds a form for creating a new rclone remote.
-func NewRemoteForm() (*huh.Form, []string) {
-	var (
-		name       string
-		remoteType string
-		params     string
-	)
-
-	keys := []string{"name", "type", "params"}
-
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Key("name").
-				Title("Remote Name").
-				Description("Unique name for this remote (e.g., gdrive, s3backup)").
-				Value(&name).
-				Validate(nonEmpty("remote name")),
-			huh.NewSelect[string]().
-				Key("type").
-				Title("Remote Type").
-				Description("Select the storage provider").
-				Options(
-					huh.NewOption("Google Drive", "drive"),
-					huh.NewOption("Amazon S3", "s3"),
-					huh.NewOption("Dropbox", "dropbox"),
-					huh.NewOption("OneDrive", "onedrive"),
-					huh.NewOption("SFTP", "sftp"),
-					huh.NewOption("Local", "local"),
-					huh.NewOption("Crypt (encrypt another remote)", "crypt"),
-					huh.NewOption("FTP", "ftp"),
-					huh.NewOption("WebDAV", "webdav"),
-					huh.NewOption("B2 (Backblaze)", "b2"),
-					huh.NewOption("Mega", "mega"),
-					huh.NewOption("pCloud", "pcloud"),
-				).
-				Value(&remoteType),
-			huh.NewText().
-				Key("params").
-				Title("Extra Parameters (optional)").
-				Description("key=value pairs, one per line\ne.g., client_id=xxx\n     root_folder_id=yyy").
-				Value(&params),
-		),
-	).WithShowHelp(true)
-
-	return form, keys
-}
-
 func nonEmpty(field string) func(string) error {
 	return func(s string) error {
 		if s == "" {

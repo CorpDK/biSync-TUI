@@ -14,11 +14,12 @@ import (
 
 // RemoteDetailModel displays details for the selected rclone remote.
 type RemoteDetailModel struct {
-	viewport viewport.Model
-	active   bool
-	width    int
-	height   int
-	remote   *RemoteItem
+	viewport  viewport.Model
+	active    bool
+	width     int
+	height    int
+	remote    *RemoteItem
+	statusMsg string // transient message (e.g. test result)
 }
 
 // NewRemoteDetail creates a new remote detail panel.
@@ -49,6 +50,13 @@ func (m *RemoteDetailModel) SetSize(w, h int) {
 // SetRemote updates the displayed remote.
 func (m *RemoteDetailModel) SetRemote(r *RemoteItem) {
 	m.remote = r
+	m.statusMsg = ""
+	m.refreshContent()
+}
+
+// SetStatus sets a transient status message shown below the details.
+func (m *RemoteDetailModel) SetStatus(msg string) {
+	m.statusMsg = msg
 	m.refreshContent()
 }
 
@@ -67,9 +75,10 @@ func (m *RemoteDetailModel) renderDetail() string {
 	header := theme.DetailHeaderStyle.Render("Remote: " + r.Name)
 	b.WriteString(header + "\n\n")
 
+	labelStyle := lipgloss.NewStyle().Foreground(theme.ColorMuted).Width(20)
 	row := func(label, value string) {
 		b.WriteString(fmt.Sprintf("  %s %s\n",
-			theme.DetailLabelStyle.Render(label+":"),
+			labelStyle.Render(label+":"),
 			theme.DetailValueStyle.Render(value),
 		))
 	}
@@ -95,6 +104,9 @@ func (m *RemoteDetailModel) renderDetail() string {
 			continue
 		}
 		v := r.Details[k]
+		if v == "" {
+			continue
+		}
 		if sensitive[k] {
 			v = "********"
 		} else if len(v) > 70 {
@@ -103,12 +115,10 @@ func (m *RemoteDetailModel) renderDetail() string {
 		row(k, v)
 	}
 
-	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  %s create  %s delete  %s test connection",
-		theme.StatusKeyStyle.Render("C"),
-		theme.StatusKeyStyle.Render("X"),
-		theme.StatusKeyStyle.Render("t"),
-	))
+	if m.statusMsg != "" {
+		b.WriteString("\n")
+		b.WriteString("  " + m.statusMsg + "\n")
+	}
 
 	return b.String()
 }
