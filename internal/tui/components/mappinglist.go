@@ -105,6 +105,12 @@ func (m *MappingListModel) SetSize(w, h int) {
 	m.list.SetSize(w, h)
 }
 
+// Width returns the current list width.
+func (m MappingListModel) Width() int { return m.list.Width() }
+
+// Height returns the current list height.
+func (m MappingListModel) Height() int { return m.list.Height() }
+
 // SelectedMapping returns the currently selected mapping, or nil.
 func (m MappingListModel) SelectedMapping() *MappingItem {
 	item := m.list.SelectedItem()

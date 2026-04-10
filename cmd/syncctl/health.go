@@ -20,7 +20,7 @@ var healthCmd = &cobra.Command{
 }
 
 func runHealth(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
+	cfg, err := config.LoadProfile(profileName)
 	if err != nil {
 		return err
 	}
@@ -52,5 +52,36 @@ func runHealth(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\n", remote, status)
 	}
 
-	return w.Flush()
+	w.Flush()
+
+	// Validate crypt remotes
+	hasCrypt := false
+	for _, m := range cfg.Mappings {
+		if m.Encryption.Enabled {
+			hasCrypt = true
+			break
+		}
+	}
+
+	if hasCrypt {
+		fmt.Println()
+		wc := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(wc, "CRYPT REMOTE\tMAPPING\tSTATUS")
+		fmt.Fprintln(wc, "------------\t-------\t------")
+
+		for _, m := range cfg.Mappings {
+			if !m.Encryption.Enabled {
+				continue
+			}
+			err := engine.ValidateCryptRemote(ctx, m.Encryption.CryptRemote)
+			status := "valid (type=crypt)"
+			if err != nil {
+				status = fmt.Sprintf("invalid: %v", err)
+			}
+			fmt.Fprintf(wc, "%s\t%s\t%s\n", m.Encryption.CryptRemote, m.Name, status)
+		}
+		wc.Flush()
+	}
+
+	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/CorpDK/bisync-tui/internal/config"
 	"github.com/CorpDK/bisync-tui/internal/logs"
 	"github.com/CorpDK/bisync-tui/internal/state"
+	bisync "github.com/CorpDK/bisync-tui/internal/sync"
 	"github.com/CorpDK/bisync-tui/internal/tui/theme"
 )
 
@@ -41,6 +42,9 @@ type DetailPanelModel struct {
 	active   bool
 	width    int
 	height   int
+
+	// Sub-components
+	diffView DiffViewModel
 
 	// Current content
 	mapping       *config.Mapping
@@ -146,6 +150,14 @@ func (m *DetailPanelModel) SetRemoteAbout(about *RemoteAboutInfo) {
 	}
 }
 
+// SetDiffEntries updates the diff preview entries.
+func (m *DetailPanelModel) SetDiffEntries(entries []bisync.DiffEntry) {
+	m.diffView.SetEntries(entries)
+	if m.mode == DetailDiff {
+		m.refreshContent()
+	}
+}
+
 func (m *DetailPanelModel) refreshContent() {
 	switch m.mode {
 	case DetailInfo:
@@ -153,7 +165,7 @@ func (m *DetailPanelModel) refreshContent() {
 	case DetailLogs:
 		m.viewport.SetContent(m.renderLogs())
 	case DetailDiff:
-		m.viewport.SetContent(m.renderLogs()) // diff is also log-based output
+		m.viewport.SetContent(m.diffView.View())
 	case DetailHistory:
 		m.viewport.SetContent(m.renderHistory())
 	case DetailAllLogs:
@@ -199,6 +211,10 @@ func (m *DetailPanelModel) renderInfo() string {
 	}
 	if m.mapping.BackupEnabled {
 		row("Backup", fmt.Sprintf("enabled (%d day retention)", m.mapping.BackupRetention))
+	}
+	if m.mapping.Encryption.Enabled {
+		row("Encryption", "enabled")
+		row("Crypt", m.mapping.Encryption.CryptRemote)
 	}
 
 	// Remote storage info
@@ -353,6 +369,7 @@ func (m DetailPanelModel) renderTabs() string {
 	}{
 		{"Info", DetailInfo},
 		{"Logs", DetailLogs},
+		{"Diff", DetailDiff},
 		{"History", DetailHistory},
 		{"All Logs", DetailAllLogs},
 	}

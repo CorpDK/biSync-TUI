@@ -43,7 +43,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cfg, err := config.Load()
+	cfg, err := config.LoadProfile(profileName)
 	if err != nil {
 		return err
 	}

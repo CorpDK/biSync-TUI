@@ -144,6 +144,22 @@ func (e *Engine) RunSync(ctx context.Context, m config.Mapping, opts SyncOptions
 	return result
 }
 
+// RunDiff performs a dry-run bisync and parses the output into structured diff entries.
+func (e *Engine) RunDiff(ctx context.Context, m config.Mapping, opts SyncOptions) DiffResult {
+	opts.DryRun = true
+	start := time.Now()
+	result := e.RunSync(ctx, m, opts, nil)
+	dr := DiffResult{
+		MappingName: m.Name,
+		Duration:    time.Since(start),
+	}
+	if !result.Success {
+		dr.Error = result.ErrorMsg
+	}
+	dr.Entries = ParseDiffOutput(result.Output)
+	return dr
+}
+
 // RunCopy executes rclone copy (used for first-run bootstrap: remote → local).
 func (e *Engine) RunCopy(ctx context.Context, src, dst string, outputCh chan<- string) SyncResult {
 	start := time.Now()

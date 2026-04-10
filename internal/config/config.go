@@ -33,8 +33,9 @@ type Mapping struct {
 	BandwidthLimit  string   `toml:"bandwidth_limit"`
 	ExtraFlags      []string `toml:"extra_flags"`
 	ConflictResolve string   `toml:"conflict_resolve"`
-	BackupEnabled   bool     `toml:"backup_enabled"`
-	BackupRetention int      `toml:"backup_retention_days"`
+	BackupEnabled   bool             `toml:"backup_enabled"`
+	BackupRetention int              `toml:"backup_retention_days"`
+	Encryption      EncryptionConfig `toml:"encryption"`
 }
 
 // Config holds the full application configuration.
@@ -52,7 +53,22 @@ type tomlFile struct {
 
 // Load reads config from the default XDG config directory.
 func Load() (*Config, error) {
-	return LoadFrom(filepath.Join(ConfigDir(), "settings.toml"))
+	return LoadProfile("")
+}
+
+// LoadProfile reads config for the given profile name.
+// An empty name loads the default settings.toml.
+func LoadProfile(profile string) (*Config, error) {
+	return LoadFrom(ProfilePath(profile))
+}
+
+// ProfilePath returns the config file path for a given profile.
+// An empty name returns the default settings.toml path.
+func ProfilePath(profile string) string {
+	if profile == "" {
+		return filepath.Join(ConfigDir(), "settings.toml")
+	}
+	return filepath.Join(ConfigDir(), "profiles", profile+".toml")
 }
 
 // LoadFrom reads config from a specific TOML file.
@@ -114,6 +130,13 @@ func (c *Config) Validate() []error {
 			errs = append(errs, fmt.Errorf("mapping %q: remote path is empty", m.Name))
 		} else if !IsRemotePath(m.Remote) {
 			errs = append(errs, fmt.Errorf("mapping %q: remote path missing ':' separator: %s", m.Name, m.Remote))
+		}
+
+		if m.Encryption.Enabled && m.Encryption.CryptRemote == "" {
+			errs = append(errs, fmt.Errorf("mapping %q: encryption enabled but crypt_remote is empty", m.Name))
+		}
+		if m.Encryption.Enabled && m.Encryption.CryptRemote != "" && !IsRemotePath(m.Encryption.CryptRemote) {
+			errs = append(errs, fmt.Errorf("mapping %q: crypt_remote missing ':' separator: %s", m.Name, m.Encryption.CryptRemote))
 		}
 	}
 

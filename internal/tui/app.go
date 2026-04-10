@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -15,6 +16,7 @@ import (
 	"github.com/CorpDK/bisync-tui/internal/state"
 	bisync "github.com/CorpDK/bisync-tui/internal/sync"
 	"github.com/CorpDK/bisync-tui/internal/tui/components"
+	"github.com/CorpDK/bisync-tui/internal/tui/forms"
 )
 
 // FocusedPanel tracks which panel has input focus.
@@ -44,6 +46,7 @@ type AppModel struct {
 	titleBar    components.TitleBarModel
 	actionMenu  *components.ActionMenuModel
 	modal       *components.ModalModel
+	formOverlay *components.FormOverlayModel
 
 	// State
 	focusedPanel FocusedPanel
@@ -125,6 +128,13 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// If form overlay is showing, it gets priority
+		if m.formOverlay != nil {
+			overlay, cmd := m.formOverlay.Update(msg)
+			m.formOverlay = &overlay
+			return m, cmd
+		}
+
 		// If action menu is showing, it gets priority
 		if m.actionMenu != nil {
 			menu, cmd := m.actionMenu.Update(msg)
@@ -133,6 +143,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		return m.handleKeyPress(msg)
+
+	case components.FormSubmittedMsg:
+		m.formOverlay = nil
+		return m.handleFormSubmit(msg)
+
+	case components.FormCancelledMsg:
+		m.formOverlay = nil
+		return m, nil
 
 	case components.ActionSelectedMsg:
 		m.actionMenu = nil
@@ -210,6 +228,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Trashed: msg.About.Trashed,
 			})
 		}
+		return m, nil
+
+	case DiffResultMsg:
+		if msg.Error != "" {
+			m.detailPanel.AppendLog("Diff error: " + msg.Error)
+		}
+		m.detailPanel.SetDiffEntries(msg.Entries)
+		m.detailPanel.SetMode(components.DetailDiff)
 		return m, nil
 
 	case ConflictsDetectedMsg:
@@ -294,6 +320,12 @@ func (m AppModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detailPanel.SetMode(components.DetailInfo)
 		return m, nil
 
+	case key.Matches(msg, m.keys.Diff):
+		return m.runDiffPreview()
+
+	case key.Matches(msg, m.keys.NewMapping):
+		return m.showNewMappingForm()
+
 	case key.Matches(msg, m.keys.Help):
 		// Toggle help display - for now just show full keybindings in detail panel
 		return m, nil
@@ -346,6 +378,10 @@ func (m AppModel) handleAction(msg components.ActionSelectedMsg) (tea.Model, tea
 		return m, m.loadHistory(mapping.Name)
 	case components.ActionAllLogs:
 		return m, m.loadAllLogs()
+	case components.ActionDiff:
+		return m.runDiffPreview()
+	case components.ActionEncryption:
+		return m.showEncryptionForm(msg.MappingName)
 	}
 	return m, nil
 }
@@ -475,6 +511,144 @@ func (m AppModel) listenHealthUpdates() tea.Cmd {
 	}
 }
 
+func (m AppModel) runDiffPreview() (tea.Model, tea.Cmd) {
+	selected := m.mappingList.SelectedMapping()
+	if selected == nil {
+		return m, nil
+	}
+	mapping := selected.Mapping
+	engine := m.engine
+	ctx := m.ctx
+
+	return m, func() tea.Msg {
+		result := engine.RunDiff(ctx, mapping, bisync.SyncOptions{})
+		return DiffResultMsg{
+			MappingName: result.MappingName,
+			Entries:     result.Entries,
+			Error:       result.Error,
+		}
+	}
+}
+
+func (m AppModel) showNewMappingForm() (tea.Model, tea.Cmd) {
+	form, keys := forms.NewMappingForm()
+	overlay := components.NewFormOverlay("create-mapping", form, keys, m.width, m.height)
+	m.formOverlay = &overlay
+	return m, overlay.Init()
+}
+
+func (m AppModel) showEncryptionForm(mappingName string) (tea.Model, tea.Cmd) {
+	remotes, err := m.engine.ListRemotes(m.ctx)
+	if err != nil {
+		m.detailPanel.AppendLog("Error listing remotes: " + err.Error())
+		return m, nil
+	}
+	if len(remotes) == 0 {
+		m.detailPanel.AppendLog("No rclone remotes configured. Run 'rclone config' first.")
+		return m, nil
+	}
+
+	form, keys := forms.NewEncryptionForm(mappingName, remotes)
+	overlay := components.NewFormOverlay("setup-encryption-"+mappingName, form, keys, m.width, m.height)
+	m.formOverlay = &overlay
+	return m, overlay.Init()
+}
+
+func (m AppModel) handleFormSubmit(msg components.FormSubmittedMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.ID == "create-mapping":
+		return m.handleCreateMapping(msg.Values)
+	case msg.ID == "create-profile":
+		return m.handleCreateProfile(msg.Values)
+	case strings.HasPrefix(msg.ID, "setup-encryption-"):
+		mappingName := strings.TrimPrefix(msg.ID, "setup-encryption-")
+		return m.handleSetupEncryption(mappingName, msg.Values)
+	}
+	return m, nil
+}
+
+func (m AppModel) handleCreateMapping(values map[string]string) (tea.Model, tea.Cmd) {
+	mapping := config.Mapping{
+		Name:            values["name"],
+		Local:           values["local"],
+		Remote:          values["remote"],
+		FiltersFile:     values["filters_file"],
+		BandwidthLimit:  values["bandwidth_limit"],
+		ConflictResolve: values["conflict_resolve"],
+		BackupEnabled:   values["backup_enabled"] == "true",
+	}
+	if mapping.BackupEnabled {
+		mapping.BackupRetention = 7
+	}
+
+	cfgPath := config.ProfilePath("")
+	if err := config.AddMapping(cfgPath, mapping); err != nil {
+		// Show error in detail panel
+		m.detailPanel.AppendLog("Error adding mapping: " + err.Error())
+		return m, nil
+	}
+
+	// Reload config and refresh UI
+	cfg, err := config.LoadProfile("")
+	if err != nil {
+		m.detailPanel.AppendLog("Error reloading config: " + err.Error())
+		return m, nil
+	}
+	m.config = cfg
+	m.states = m.stateStore.LoadAll(cfg.Mappings)
+	m.mappingList = components.NewMappingList(cfg.Mappings, m.states, m.mappingList.Width(), m.mappingList.Height())
+	return m, nil
+}
+
+func (m AppModel) handleSetupEncryption(mappingName string, values map[string]string) (tea.Model, tea.Cmd) {
+	mapping := m.findMapping(mappingName)
+	if mapping == nil {
+		return m, nil
+	}
+
+	mapping.Encryption = config.EncryptionConfig{
+		Enabled:     true,
+		CryptRemote: values["crypt_remote"],
+	}
+
+	cfgPath := config.ProfilePath("")
+	if err := config.UpdateMapping(cfgPath, *mapping); err != nil {
+		m.detailPanel.AppendLog("Error saving encryption config: " + err.Error())
+		return m, nil
+	}
+
+	// Reload config
+	cfg, err := config.LoadProfile("")
+	if err != nil {
+		m.detailPanel.AppendLog("Error reloading config: " + err.Error())
+		return m, nil
+	}
+	m.config = cfg
+	m.detailPanel.AppendLog("Encryption enabled for " + mappingName + " using " + values["crypt_remote"])
+
+	// Refresh detail panel
+	for _, mp := range cfg.Mappings {
+		if mp.Name == mappingName {
+			ms := m.states[mappingName]
+			m.detailPanel.SetMapping(&mp, ms)
+			break
+		}
+	}
+
+	return m, nil
+}
+
+func (m AppModel) handleCreateProfile(values map[string]string) (tea.Model, tea.Cmd) {
+	name := values["name"]
+	path := config.ProfilePath(name)
+	if err := config.CreateDefaultConfig(path); err != nil {
+		m.detailPanel.AppendLog("Error creating profile: " + err.Error())
+		return m, nil
+	}
+	m.detailPanel.AppendLog("Created profile: " + name)
+	return m, nil
+}
+
 func (m *AppModel) layout() {
 	if m.width == 0 || m.height == 0 {
 		return
@@ -519,6 +693,9 @@ func (m AppModel) View() string {
 	}
 
 	// Render overlay if present
+	if m.formOverlay != nil {
+		return m.formOverlay.View()
+	}
 	if m.modal != nil {
 		return m.modal.View()
 	}

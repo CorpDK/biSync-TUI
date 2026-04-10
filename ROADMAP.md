@@ -2,10 +2,6 @@
 
 ## Planned
 
-### Non-interactive CLI Enhancements
-- `syncctl status --json` for machine-readable output
-- `syncctl diff --name X` to preview changes before syncing
-
 ### Systemd Timer Integration
 - `syncctl generate-systemd` outputs service + timer unit files
 - Configurable interval (default: 30 minutes)
@@ -15,20 +11,6 @@
 - Watch for file changes via fsnotify
 - Trigger sync after configurable debounce period (default: 30s)
 - `syncctl watch` command or toggle in TUI
-
-### Profile Support
-- Named config profiles for different machines/contexts
-- `syncctl --profile work` to load alternate config
-- Useful for laptop vs. desktop setups
-
-### Encryption Integration
-- Support rclone crypt remotes
-- Transparent encrypted sync with config guidance
-
-### Parallel Diff Preview
-- Before syncing, show what would change
-- Fetch diffs for all mappings in parallel
-- Color-coded additions/deletions/modifications
 
 ### Sync Scheduling via TUI
 - Configure cron-like schedules per mapping directly in the TUI

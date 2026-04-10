@@ -14,6 +14,8 @@ import (
 	"github.com/CorpDK/bisync-tui/internal/tui"
 )
 
+var profileName string
+
 var rootCmd = &cobra.Command{
 	Use:   "syncctl",
 	Short: "A rich terminal dashboard for rclone bisync",
@@ -22,11 +24,15 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	rootCmd.PersistentFlags().StringVarP(&profileName, "profile", "p", "", "Config profile name")
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(completionCmd)
 	rootCmd.AddCommand(healthCmd)
+	rootCmd.AddCommand(profileCmd)
+	rootCmd.AddCommand(diffCmd)
+	rootCmd.AddCommand(initCryptCmd)
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print version",
@@ -43,7 +49,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load config
-	cfg, err := config.Load()
+	cfg, err := config.LoadProfile(profileName)
 	if err != nil {
 		return fmt.Errorf("load config: %w\n\nCreate %s with your mappings.\nSee README for TOML format.",
 			err, filepath.Join(config.ConfigDir(), "settings.toml"))

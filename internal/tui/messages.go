@@ -72,3 +72,10 @@ type ConflictsDetectedMsg struct {
 	MappingName string
 	Conflicts   []bisync.Conflict
 }
+
+// DiffResultMsg carries diff preview results for a mapping.
+type DiffResultMsg struct {
+	MappingName string
+	Entries     []bisync.DiffEntry
+	Error       string
+}

@@ -16,7 +16,9 @@ type KeyMap struct {
 	Tab     key.Binding
 	Quit    key.Binding
 	Help    key.Binding
-	Escape  key.Binding
+	Escape     key.Binding
+	NewMapping key.Binding
+	Diff       key.Binding
 }
 
 // DefaultKeyMap returns the default keybindings.
@@ -74,12 +76,20 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "back"),
 		),
+		NewMapping: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "new mapping"),
+		),
+		Diff: key.NewBinding(
+			key.WithKeys("D"),
+			key.WithHelp("D", "diff preview"),
+		),
 	}
 }
 
 // ShortHelp returns a minimal set of keybindings for the status bar.
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Sync, k.SyncAll, k.DryRun, k.Resync, k.Select, k.Help, k.Quit}
+	return []key.Binding{k.Sync, k.SyncAll, k.DryRun, k.Diff, k.NewMapping, k.Help, k.Quit}
 }
 
 // FullHelp returns the complete keybinding set.
@@ -87,6 +97,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Select, k.Tab},
 		{k.Sync, k.SyncAll, k.DryRun, k.Resync},
-		{k.Logs, k.Info, k.Help, k.Quit},
+		{k.Diff, k.NewMapping, k.Logs, k.Info},
+		{k.Help, k.Quit},
 	}
 }

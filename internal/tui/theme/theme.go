@@ -73,6 +73,13 @@ var (
 				Underline(true)
 )
 
+// Diff
+var (
+	DiffAddedStyle    = lipgloss.NewStyle().Foreground(ColorSuccess)
+	DiffDeletedStyle  = lipgloss.NewStyle().Foreground(ColorError)
+	DiffModifiedStyle = lipgloss.NewStyle().Foreground(ColorWarning)
+)
+
 // Modal
 var (
 	ModalStyle = lipgloss.NewStyle().

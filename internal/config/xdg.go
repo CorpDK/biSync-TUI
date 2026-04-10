@@ -39,6 +39,7 @@ func EnsureDirs() error {
 	dirs := []string{
 		ConfigDir(),
 		filepath.Join(ConfigDir(), "filters"),
+		filepath.Join(ConfigDir(), "profiles"),
 		filepath.Join(StateDir(), "state"),
 		filepath.Join(StateDir(), "logs"),
 		filepath.Join(StateDir(), "history"),
