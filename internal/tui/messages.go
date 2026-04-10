@@ -6,6 +6,7 @@ import (
 	"github.com/CorpDK/bisync-tui/internal/logs"
 	"github.com/CorpDK/bisync-tui/internal/state"
 	bisync "github.com/CorpDK/bisync-tui/internal/sync"
+	"github.com/CorpDK/bisync-tui/internal/tui/components"
 )
 
 // SyncStartedMsg signals that a sync has begun.
@@ -101,4 +102,9 @@ type RemoteTestMsg struct {
 // RcloneConfigDoneMsg signals that the interactive rclone config process exited.
 type RcloneConfigDoneMsg struct {
 	Err error
+}
+
+// AllRemotesTestedMsg carries parallel connectivity test results for all remotes.
+type AllRemotesTestedMsg struct {
+	Results []components.RemoteHealth
 }

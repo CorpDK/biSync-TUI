@@ -2,6 +2,8 @@ package tui
 
 import (
 	"os/exec"
+	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -106,6 +108,37 @@ func (m AppModel) deleteRemote(name string) tea.Cmd {
 	return func() tea.Msg {
 		err := m.engine.DeleteRemote(m.ctx, name)
 		return RemoteDeletedMsg{Name: name, Err: err}
+	}
+}
+
+// testAllRemotes tests connectivity to all configured remotes in parallel.
+func (m AppModel) testAllRemotes() tea.Cmd {
+	engine := m.engine
+	ctx := m.ctx
+	return func() tea.Msg {
+		remotes, err := engine.ListRemotes(ctx)
+		if err != nil {
+			return AllRemotesTestedMsg{}
+		}
+
+		results := make([]components.RemoteHealth, len(remotes))
+		var wg sync.WaitGroup
+		for i, remote := range remotes {
+			wg.Add(1)
+			go func(idx int, r string) {
+				defer wg.Done()
+				rh := components.RemoteHealth{Name: strings.TrimSuffix(r, ":")}
+				err := engine.CheckConnectivity(ctx, r)
+				if err != nil {
+					rh.Error = err.Error()
+				} else {
+					rh.Healthy = true
+				}
+				results[idx] = rh
+			}(i, remote)
+		}
+		wg.Wait()
+		return AllRemotesTestedMsg{Results: results}
 	}
 }
 

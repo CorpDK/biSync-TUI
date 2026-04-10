@@ -14,15 +14,24 @@ import (
 	"github.com/CorpDK/bisync-tui/internal/tui/theme"
 )
 
+// RemoteHealth holds the connectivity test result for one remote.
+type RemoteHealth struct {
+	Name    string
+	Healthy bool
+	Error   string
+}
+
 // DashboardModel shows an overview across all mappings.
 type DashboardModel struct {
 	viewport viewport.Model
 	width    int
 	height   int
 
-	mappings    []config.Mapping
-	states      map[string]*state.MappingState
-	remoteCount int
+	mappings      []config.Mapping
+	states        map[string]*state.MappingState
+	remoteCount   int
+	remoteHealth  []RemoteHealth
+	healthTesting bool
 }
 
 // NewDashboard creates a new dashboard view.
@@ -44,11 +53,25 @@ func (m *DashboardModel) SetSize(w, h int) {
 	m.refreshContent()
 }
 
-// Update sets the data and refreshes.
+// SetData sets the mapping/state data and refreshes.
 func (m *DashboardModel) SetData(mappings []config.Mapping, states map[string]*state.MappingState, remoteCount int) {
 	m.mappings = mappings
 	m.states = states
 	m.remoteCount = remoteCount
+	m.refreshContent()
+}
+
+// SetHealthTesting marks that connectivity tests are in progress.
+func (m *DashboardModel) SetHealthTesting() {
+	m.healthTesting = true
+	m.remoteHealth = nil
+	m.refreshContent()
+}
+
+// SetRemoteHealth sets the connectivity test results and refreshes.
+func (m *DashboardModel) SetRemoteHealth(results []RemoteHealth) {
+	m.remoteHealth = results
+	m.healthTesting = false
 	m.refreshContent()
 }
 
@@ -173,6 +196,29 @@ func (m *DashboardModel) render() string {
 				syncs,
 				lastSync,
 			))
+		}
+	}
+
+	// Remote health section
+	b.WriteString("\n")
+	b.WriteString(theme.DetailHeaderStyle.Render("Remote Connectivity") + "\n\n")
+	if m.healthTesting {
+		b.WriteString("  " + theme.StatusSyncStyle.Render("◐ Testing all remotes...") + "\n")
+	} else if len(m.remoteHealth) == 0 {
+		b.WriteString("  Press " + theme.StatusKeyStyle.Render("t") +
+			" to test all remote connections\n")
+	} else {
+		for _, rh := range m.remoteHealth {
+			if rh.Healthy {
+				fmt.Fprintf(&b, "  %s  %s\n",
+					theme.StatusIdleStyle.Render("✓"),
+					rh.Name)
+			} else {
+				fmt.Fprintf(&b, "  %s  %s  %s\n",
+					theme.StatusErrorStyle.Render("✗"),
+					rh.Name,
+					theme.StatusErrorStyle.Render(rh.Error))
+			}
 		}
 	}
 

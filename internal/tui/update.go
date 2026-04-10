@@ -87,6 +87,9 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleRemoteTest(msg)
 	case RcloneConfigDoneMsg:
 		return m, m.loadRemotes()
+	case AllRemotesTestedMsg:
+		m.dashboard.SetRemoteHealth(msg.Results)
+		return m, nil
 	}
 
 	// Forward unhandled messages to the form overlay when active

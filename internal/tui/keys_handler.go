@@ -202,6 +202,10 @@ func (m AppModel) routeRemotesPanel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m AppModel) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "t" {
+		m.dashboard.SetHealthTesting()
+		return m, m.testAllRemotes()
+	}
 	var cmd tea.Cmd
 	m.dashboard, cmd = m.dashboard.Update(msg)
 	return m, cmd

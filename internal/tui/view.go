@@ -76,35 +76,61 @@ func (m *AppModel) layout() {
 func (m AppModel) renderHelp() string {
 	title := theme.ModalTitleStyle.Render("Keybindings")
 
-	bindings := []struct{ key, desc string }{
+	common := []struct{ key, desc string }{
 		{"1 / 2 / 3", "Switch view (Mappings / Remotes / Dashboard)"},
 		{"j/k, Up/Down", "Navigate list"},
-		{"Enter", "Open actions menu"},
 		{"Tab", "Switch panel focus"},
-		{"h/l, Left/Right", "Switch detail tab (when detail focused)"},
-		{"s", "Sync selected mapping"},
-		{"S", "Sync all mappings"},
-		{"d", "Dry-run (preview only)"},
-		{"D", "Diff preview"},
-		{"r", "Force resync"},
-		{"n", "New mapping"},
-		{"Enter > E", "Edit mapping (via actions menu)"},
-		{"Enter > X", "Delete mapping (via actions menu)"},
-		{"C / X", "Create / delete remote (Remotes view)"},
-		{"t", "Test remote connection (Remotes view)"},
 		{"?", "This help"},
 		{"q / Ctrl+C", "Quit"},
 		{"Esc", "Back / dismiss"},
 	}
 
+	var viewBindings []struct{ key, desc string }
+	switch m.viewMode {
+	case ViewMappings:
+		viewBindings = []struct{ key, desc string }{
+			{"Enter", "Open actions menu"},
+			{"h/l, Left/Right", "Switch detail tab"},
+			{"s", "Sync selected mapping"},
+			{"S", "Sync all mappings"},
+			{"d", "Dry-run (preview only)"},
+			{"D", "Diff preview"},
+			{"r", "Force resync"},
+			{"n", "New mapping"},
+			{"Enter > E", "Edit mapping"},
+			{"Enter > X", "Delete mapping"},
+		}
+	case ViewRemotes:
+		viewBindings = []struct{ key, desc string }{
+			{"C", "Create remote (launches rclone config)"},
+			{"X", "Delete selected remote"},
+			{"t", "Test remote connection"},
+		}
+	case ViewDashboard:
+		viewBindings = []struct{ key, desc string }{
+			{"t", "Test all remote connections"},
+		}
+	}
+
+
 	var b strings.Builder
 	b.WriteString(title + "\n\n")
-	for _, bind := range bindings {
+	for _, bind := range viewBindings {
 		fmt.Fprintf(&b, "  %s  %s\n",
 			theme.StatusKeyStyle.Render(fmt.Sprintf("%-20s", bind.key)),
 			theme.StatusDescStyle.Render(bind.desc),
 		)
 	}
+	b.WriteString("\n  " + theme.StatusDescStyle.Render("── Common ──") + "\n\n")
+	for _, bind := range common {
+		fmt.Fprintf(&b, "  %s  %s\n",
+			theme.StatusKeyStyle.Render(fmt.Sprintf("%-20s", bind.key)),
+			theme.StatusDescStyle.Render(bind.desc),
+		)
+	}
+	viewNames := []string{"Mappings", "Remotes", "Dashboard"}
+	b.WriteString("\n" + theme.StatusDescStyle.Render(
+		fmt.Sprintf("  Showing: %s view — switch views (1/2/3) for different keys", viewNames[m.viewMode])))
 	b.WriteString("\n" + theme.StatusDescStyle.Render("  Press any key to dismiss"))
 
 	return m.centerOverlay(theme.ModalStyle.Render(b.String()))

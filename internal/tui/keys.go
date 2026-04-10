@@ -111,6 +111,7 @@ func RemotesHelp() []key.Binding {
 // DashboardHelp returns keybindings for the Dashboard view status bar.
 func DashboardHelp() []key.Binding {
 	return []key.Binding{
+		key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "test all remotes")),
 		key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "mappings")),
 		key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "remotes")),
 		key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
