@@ -24,7 +24,9 @@ const (
 	ActionHistory    Action = "view-history"
 	ActionAllLogs    Action = "all-logs"
 	ActionDiff       Action = "diff-preview"
-	ActionEncryption Action = "encryption"
+	ActionEncryption    Action = "encryption"
+	ActionEditMapping   Action = "edit-mapping"
+	ActionDeleteMapping Action = "delete-mapping"
 )
 
 // ActionItem implements list.Item for the action menu.
@@ -75,6 +77,8 @@ func NewActionMenu(mappingName string, needsInit bool, width, height int) Action
 			ActionItem{action: ActionAllLogs, key: "L", label: "All logs"},
 			ActionItem{action: ActionDiff, key: "D", label: "Diff preview"},
 			ActionItem{action: ActionEncryption, key: "e", label: "Encryption setup"},
+			ActionItem{action: ActionEditMapping, key: "E", label: "Edit mapping"},
+			ActionItem{action: ActionDeleteMapping, key: "X", label: "Delete mapping"},
 			ActionItem{action: ActionInfo, key: "i", label: "Info / details"},
 			ActionItem{action: ActionRemoteSize, key: "z", label: "Show remote size"},
 		}
@@ -143,6 +147,10 @@ func (m ActionMenuModel) Update(msg tea.Msg) (ActionMenuModel, tea.Cmd) {
 			return m, m.selectByAction(ActionDiff)
 		case "e":
 			return m, m.selectByAction(ActionEncryption)
+		case "E":
+			return m, m.selectByAction(ActionEditMapping)
+		case "X":
+			return m, m.selectByAction(ActionDeleteMapping)
 		case "b":
 			return m, m.selectByAction(ActionInit)
 		}

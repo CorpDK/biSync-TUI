@@ -79,3 +79,26 @@ type DiffResultMsg struct {
 	Entries     []bisync.DiffEntry
 	Error       string
 }
+
+// RemotesLoadedMsg carries loaded remote config info.
+type RemotesLoadedMsg struct {
+	Remotes []bisync.RemoteInfo
+	Err     error
+}
+
+// RemoteDeletedMsg signals that a remote was deleted.
+type RemoteDeletedMsg struct {
+	Name string
+	Err  error
+}
+
+// RemoteCreatedMsg signals that a remote was created.
+type RemoteCreatedMsg struct {
+	Err error
+}
+
+// RemoteTestMsg carries the result of a remote connectivity test.
+type RemoteTestMsg struct {
+	Name string
+	Err  error
+}

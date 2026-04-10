@@ -16,6 +16,13 @@ import (
 	"github.com/CorpDK/bisync-tui/internal/tui/theme"
 )
 
+// RemoteDisplayInfo holds remote config info for display.
+type RemoteDisplayInfo struct {
+	Name    string
+	Type    string
+	Details map[string]string
+}
+
 // RemoteAboutInfo holds storage space data for display.
 type RemoteAboutInfo struct {
 	Total   int64
@@ -33,6 +40,7 @@ const (
 	DetailDiff
 	DetailHistory
 	DetailAllLogs
+	DetailRemotes
 )
 
 // DetailPanelModel displays info/logs for the selected mapping.
@@ -53,7 +61,9 @@ type DetailPanelModel struct {
 	history       []state.HistoryRecord
 	allLogEntries []logs.LogEntry
 	remoteAbout   *RemoteAboutInfo
-	autoScroll    bool
+	remotes        []RemoteDisplayInfo
+	selectedRemote int
+	autoScroll     bool
 }
 
 // NewDetailPanel creates a new detail panel.
@@ -80,7 +90,7 @@ func (m *DetailPanelModel) SetSize(w, h int) {
 	m.width = w
 	m.height = h
 	m.viewport.Width = w
-	m.viewport.Height = h
+	m.viewport.Height = h - 1 // reserve 1 line for tabs
 	m.refreshContent()
 }
 
@@ -91,6 +101,11 @@ func (m *DetailPanelModel) SetMapping(mapping *config.Mapping, st *state.Mapping
 	m.mode = DetailInfo
 	m.logLines = nil
 	m.refreshContent()
+}
+
+// Mode returns the current display mode.
+func (m DetailPanelModel) Mode() DetailMode {
+	return m.mode
 }
 
 // SetMode switches the display mode.
@@ -158,6 +173,23 @@ func (m *DetailPanelModel) SetDiffEntries(entries []bisync.DiffEntry) {
 	}
 }
 
+// SetRemotes sets the remote config info for display.
+func (m *DetailPanelModel) SetRemotes(remotes []RemoteDisplayInfo) {
+	m.remotes = remotes
+	m.selectedRemote = 0
+	if m.mode == DetailRemotes {
+		m.refreshContent()
+	}
+}
+
+// SelectedRemoteName returns the name of the currently highlighted remote, or "".
+func (m DetailPanelModel) SelectedRemoteName() string {
+	if m.mode != DetailRemotes || len(m.remotes) == 0 {
+		return ""
+	}
+	return m.remotes[m.selectedRemote].Name
+}
+
 func (m *DetailPanelModel) refreshContent() {
 	switch m.mode {
 	case DetailInfo:
@@ -170,6 +202,8 @@ func (m *DetailPanelModel) refreshContent() {
 		m.viewport.SetContent(m.renderHistory())
 	case DetailAllLogs:
 		m.viewport.SetContent(m.renderAllLogs())
+	case DetailRemotes:
+		m.viewport.SetContent(m.renderRemotes())
 	}
 }
 
@@ -266,9 +300,29 @@ func (m *DetailPanelModel) renderLogs() string {
 	var b strings.Builder
 	header := theme.DetailHeaderStyle.Render("Sync Output")
 	b.WriteString(header + "\n\n")
-	for _, line := range m.logLines {
-		b.WriteString("  " + line + "\n")
+	maxW := m.width - 4 // 2 for padding
+	if maxW < 20 {
+		maxW = 20
 	}
+	for _, line := range m.logLines {
+		b.WriteString("  " + wrapLine(line, maxW) + "\n")
+	}
+	return b.String()
+}
+
+// wrapLine soft-wraps a line to fit within maxWidth columns.
+func wrapLine(s string, maxWidth int) string {
+	if len(s) <= maxWidth {
+		return s
+	}
+	var b strings.Builder
+	for len(s) > maxWidth {
+		b.WriteString(s[:maxWidth])
+		b.WriteByte('\n')
+		b.WriteString("  ") // continuation indent
+		s = s[maxWidth:]
+	}
+	b.WriteString(s)
 	return b.String()
 }
 
@@ -331,6 +385,42 @@ func (m DetailPanelModel) Update(msg tea.Msg) (DetailPanelModel, tea.Cmd) {
 	if !m.active {
 		return m, nil
 	}
+
+	if km, ok := msg.(tea.KeyMsg); ok {
+		// j/k navigation for Remotes tab
+		if m.mode == DetailRemotes && len(m.remotes) > 0 {
+			switch km.String() {
+			case "j", "down":
+				if m.selectedRemote < len(m.remotes)-1 {
+					m.selectedRemote++
+					m.refreshContent()
+				}
+				return m, nil
+			case "k", "up":
+				if m.selectedRemote > 0 {
+					m.selectedRemote--
+					m.refreshContent()
+				}
+				return m, nil
+			}
+		}
+
+		switch km.String() {
+		case "h", "left":
+			if m.mode > DetailInfo {
+				m.mode--
+				m.refreshContent()
+			}
+			return m, nil
+		case "l", "right":
+			if m.mode < DetailRemotes {
+				m.mode++
+				m.refreshContent()
+			}
+			return m, nil
+		}
+	}
+
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
@@ -351,7 +441,10 @@ func (m DetailPanelModel) View() string {
 		m.viewport.View(),
 	)
 
-	return style.Render(content)
+	return style.
+		Width(m.width).
+		Height(m.height).
+		Render(content)
 }
 
 func (m DetailPanelModel) renderTabs() string {
@@ -372,6 +465,7 @@ func (m DetailPanelModel) renderTabs() string {
 		{"Diff", DetailDiff},
 		{"History", DetailHistory},
 		{"All Logs", DetailAllLogs},
+		{"Remotes", DetailRemotes},
 	}
 
 	var parts []string
@@ -384,4 +478,56 @@ func (m DetailPanelModel) renderTabs() string {
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, parts...)
+}
+
+func (m *DetailPanelModel) renderRemotes() string {
+	if len(m.remotes) == 0 {
+		return "  No rclone remotes configured.\n\n  Press " +
+			theme.StatusKeyStyle.Render("C") +
+			" to create a new remote."
+	}
+
+	var b strings.Builder
+	header := theme.DetailHeaderStyle.Render("Configured Remotes")
+	b.WriteString(header + "\n\n")
+
+	for i, r := range m.remotes {
+		// Cursor indicator
+		cursor := "  "
+		nameStyle := theme.NormalItemStyle
+		if i == m.selectedRemote {
+			cursor = theme.SelectedItemStyle.Render("> ")
+			nameStyle = theme.SelectedItemStyle
+		}
+
+		// Remote name and type
+		b.WriteString(fmt.Sprintf("%s%s  %s\n",
+			cursor,
+			nameStyle.Render(r.Name+":"),
+			theme.StatusDescStyle.Render("("+r.Type+")"),
+		))
+
+		// Show key details (skip type and sensitive fields)
+		for k, v := range r.Details {
+			if k == "type" || k == "token" || k == "password" || k == "password2" || k == "client_secret" {
+				continue
+			}
+			display := v
+			if len(display) > 60 {
+				display = display[:57] + "..."
+			}
+			b.WriteString(fmt.Sprintf("    %s %s\n",
+				theme.DetailLabelStyle.Render(k+":"),
+				theme.DetailValueStyle.Render(display),
+			))
+		}
+
+		if i < len(m.remotes)-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	b.WriteString("\n  " + theme.StatusDescStyle.Render("C create  X delete  R refresh"))
+
+	return b.String()
 }

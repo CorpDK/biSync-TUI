@@ -150,7 +150,10 @@ func (m MappingListModel) View() string {
 	if m.active {
 		style = theme.ActivePanel
 	}
-	return style.Render(m.list.View())
+	return style.
+		Width(m.list.Width()).
+		Height(m.list.Height()).
+		Render(m.list.View())
 }
 
 // ShortHelp returns keybindings for the help display.

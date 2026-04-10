@@ -92,6 +92,7 @@ func LoadFrom(path string) (*Config, error) {
 	mappings := make([]Mapping, 0, len(tf.Mapping))
 	for name, m := range tf.Mapping {
 		m.Name = name
+		m.Local = expandTilde(m.Local)
 		mappings = append(mappings, m)
 	}
 
@@ -141,4 +142,14 @@ func (c *Config) Validate() []error {
 	}
 
 	return errs
+}
+
+// expandTilde replaces a leading ~ with the user's home directory.
+func expandTilde(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
 }

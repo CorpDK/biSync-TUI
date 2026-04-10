@@ -262,6 +262,60 @@ func (e *Engine) GetRemoteAbout(ctx context.Context, remote string) (*RemoteAbou
 	return &about, nil
 }
 
+// RemoteInfo holds parsed config details for a single rclone remote.
+type RemoteInfo struct {
+	Name string
+	Type string
+	Details map[string]string // all config key-value pairs
+}
+
+// ConfigDump returns all configured remotes with their settings.
+func (e *Engine) ConfigDump(ctx context.Context) ([]RemoteInfo, error) {
+	cmd := exec.CommandContext(ctx, e.rclonePath, "config", "dump")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("rclone config dump: %w", err)
+	}
+
+	var raw map[string]map[string]string
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return nil, fmt.Errorf("parse config dump: %w", err)
+	}
+
+	remotes := make([]RemoteInfo, 0, len(raw))
+	for name, cfg := range raw {
+		ri := RemoteInfo{
+			Name:    name,
+			Type:    cfg["type"],
+			Details: cfg,
+		}
+		remotes = append(remotes, ri)
+	}
+	return remotes, nil
+}
+
+// CreateRemote creates a new rclone remote using non-interactive config.
+func (e *Engine) CreateRemote(ctx context.Context, name, remoteType string, params map[string]string) error {
+	args := []string{"config", "create", name, remoteType}
+	for k, v := range params {
+		args = append(args, k, v)
+	}
+	cmd := exec.CommandContext(ctx, e.rclonePath, args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("rclone config create: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+// DeleteRemote removes a configured rclone remote.
+func (e *Engine) DeleteRemote(ctx context.Context, name string) error {
+	cmd := exec.CommandContext(ctx, e.rclonePath, "config", "delete", name)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("rclone config delete: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
 // CheckConnectivity verifies that a remote is reachable.
 func (e *Engine) CheckConnectivity(ctx context.Context, remotePath string) error {
 	// Extract remote name (everything before the first colon + path)

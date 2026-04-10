@@ -48,11 +48,19 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create dirs: %w", err)
 	}
 
-	// Load config
+	// Load config — if none exists, create defaults and continue into the TUI
+	cfgPath := config.ProfilePath(profileName)
 	cfg, err := config.LoadProfile(profileName)
 	if err != nil {
-		return fmt.Errorf("load config: %w\n\nCreate %s with your mappings.\nSee README for TOML format.",
-			err, filepath.Join(config.ConfigDir(), "settings.toml"))
+		if _, statErr := os.Stat(cfgPath); os.IsNotExist(statErr) {
+			if createErr := config.CreateDefaultConfig(cfgPath); createErr != nil {
+				return fmt.Errorf("create default config: %w", createErr)
+			}
+			cfg, err = config.LoadProfile(profileName)
+		}
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
 	}
 
 	// Validate config
